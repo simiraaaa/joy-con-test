@@ -1,0 +1,249 @@
+<!doctype html>
+ 
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    
+    <title>Nintendo Switch Joy-Con 加速度センサー</title>
+    <meta name="description" content="加速度センサーテスト" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js" integrity="sha512-TW5s0IT/IppJtu76UbysrBH9Hy/5X41OTAbQuffZFU6lQ1rdcLHzpU5BzVvr/YFykoiMYZVWlr/PX1mDcfM9Qg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <style>*, *:before, *:after {
+  box-sizing: border-box; 
+}
+html {
+  font-size: 13px;
+}
+body {
+  font-family: Avenir, "Open Sans", "Helvetica Neue", Helvetica, Arial, Verdana, Roboto, "游ゴシック", "Yu Gothic", "游ゴシック体", "YuGothic", "ヒラギノ角ゴ Pro W3", "Hiragino Kaku Gothic Pro", "Meiryo UI", "メイリオ", Meiryo, "ＭＳ Ｐゴシック", "MS PGothic", sans-serif;
+  color: #444;
+  background-color: hsl(0, 0%, 96%);
+}
+h1 {
+  font-size: 1.8rem;
+}
+.count {
+  margin: 16px 0;
+  font-size: 60px;
+  text-align: center;
+}
+#\$gyro {
+  white-space: pre-wrap;
+}
+
+#\$reconnect {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: rgba(0, 0, 0, 0.5);
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  font-size: 64px;
+  text-align: center;
+}
+
+</style>
+  </head>
+  <body>
+    <canvas id="myChart" width="800" height="400"></canvas>
+    <div id="$gyro"></div>
+    <div class="count" id="$count"></div>
+    <div><button type="button" onclick="counter.reset()">リセット</button></div>
+    <div id="$reconnect" style="display: none;">
+      <div>
+        <div>Joy-Conが切断されました</div>
+        <div><button type="button" onclick="reconnect()">再接続</button></div>
+      </div>
+    </div>
+    <script>
+      
+      
+      const labels = [...Array(150)].map((v, i) => i);
+      const dataMap = {
+        x: [],
+        y: [],
+        z: [],
+      };
+      const data = {
+        labels: labels,
+        datasets: [
+          {
+            label: 'X',
+            backgroundColor: 'rgb(255, 99, 132)',
+            borderColor: 'rgb(255, 99, 132)',
+            borderWidth: 0.6,
+            data: dataMap.x,
+          },
+          {
+            label: 'Y',
+            backgroundColor: 'hsl(200, 60%, 50%)',
+            borderColor: 'hsl(200, 60%, 50%)',
+            borderWidth: 0.6,
+            data: dataMap.y,
+          },
+          {
+            label: 'Z',
+            backgroundColor: 'hsl(80, 60%, 50%)',
+            borderColor: 'hsl(80, 60%, 50%)',
+            borderWidth: 0.6,
+            data: dataMap.z,
+          },
+        ]
+      };
+    
+      const config = {
+        type: 'line',
+        data: data,
+        options: {animation: false}
+      };
+      const myChart = new Chart(
+        document.getElementById('myChart'),
+        config
+      );
+
+      const counter = {
+        // TODO: Joy-Conを付ける場所を固定して + - まで決めて精度を上げる
+        // Jo
+        overThreshold: -0.02,
+        lowThreshold: -0.005,
+        direction: -1,
+        isOver: false,
+        isBreaking: false,
+        count: 0,
+        skipTime: 5 * (1000 / 30),
+        reset() {
+          this.lastTime = 0;
+          this.count = 0;
+          this.isOver = false;
+          this.isBreaking = false;
+          this.prevDirection = null;
+
+        },
+        // update(data) {
+        //   // x y どっちかで判定
+        //   // 一旦 x だけ
+        //   const list = [];
+        //   if (this.prevDirection) {
+        //     list.push({
+        //       direction: this.prevDirection,
+        //       v: data[this.prevDirection],
+        //     });
+        //   }
+        //   else {
+        //     for (const d of ['x']) {
+        //       list.push({
+        //         direction: d,
+        //         v: data[d],
+        //       });
+        //     }
+        //   }
+        //   for (const d of list) {
+        //     const v = d.v;
+        //     if (this.isBreaking) {
+        //       const diff = (v - this.prevV) * this.direction;
+        //       this.prevV = v;
+        //       if (diff > 0) {
+        //         this.isBreaking = false;
+        //         this.prevDirection = null;
+        //       }
+        //       else {
+        //         return ;
+        //       }
+        //     }
+        //     if (this.isOver) {
+        //       if (v * this.direction < this.lowThreshold) {
+        //         this.count++;
+        //         this.isOver = false;
+        //         this.isBreaking = true;
+        //         this.prevV = v;
+        //         return;
+        //       }
+        //     }
+        //     else {
+        //       if (Math.abs(v) > this.overThreshold) {
+        //         this.isOver = true;
+        //         this.direction = v < 0 ? -1 : 1;
+        //         this.prevDirection = d.direction;
+        //         return;
+        //       }
+        //     }
+        //   }
+        // },
+
+        update(data) {
+          // x y どっちかで判定
+          // 一旦 x だけ
+          const list = [];
+          if (this.prevDirection) {
+            list.push({
+              direction: this.prevDirection,
+              v: data[this.prevDirection],
+            });
+          }
+          else {
+            for (const d of ['x']) {
+              list.push({
+                direction: d,
+                v: data[d],
+              });
+            }
+          }
+          for (const d of list) {
+            const v = d.v;
+            if (this.isOver) {
+              if (v > this.lowThreshold) {
+                if (this.lastTime && Date.now() - this.lastTime < 1000) {
+                  this.count++;
+                }
+                this.lastTime = Date.now();
+                this.isOver = false;
+                // this.isBreaking = true;
+                // this.prevV = v;
+                return;
+              }
+            }
+            else {
+              // 一定時間以内の over 判定をスキップ
+              if (v < this.overThreshold && (this.lastTime ? Date.now() - this.lastTime > this.skipTime : true)) {
+                this.isOver = true;
+                // this.direction = v < 0 ? -1 : 1;
+                // this.prevDirection = d.direction;
+                return;
+              }
+            }
+          }
+        }
+      };
+      
+      api.receive('packet', (data) => {
+        ['x', 'y', 'z'].forEach((d) => {
+          const list = dataMap[d];
+          if (list.length > labels.length) list.shift();
+          list.push(data.acc[d]);
+        });
+        counter.update(data.acc);
+      });
+      api.receive('disconnect', ( ) => {
+        $reconnect.style.display = '';
+      });
+
+      function reconnect() {
+        $reconnect.style.display = 'none';
+        api.send('toMain', {type: 'connect'});
+      }
+      // api.receive('gyroscope', (data) => {
+      //   $gyro.textContent = `rps:\n${data.rps.map(e=>e+'').join('\n')}\ndps:\n${data.dps.map(e=>e+'').join('\n')}`;
+      // });
+      (function f() {
+        myChart.update();
+        $count.textContent = counter.count;
+        setTimeout(f, 1000/30);
+      })();
+    </script>
+  </body>
+</html>
+
